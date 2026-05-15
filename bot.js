@@ -49,8 +49,8 @@ bot.on("message", async function(msg) {
     const response = await getAIResponse(userId, text);
     await bot.sendMessage(chatId, response);
   } catch(err) {
-    console.error("Xato:", err.message);
-    await bot.sendMessage(chatId, "Kechirasiz, texnik muammo yuz berdi. Qayta urinib koring.");
+    console.error("Xato tafsiloti:", JSON.stringify(err));
+    await bot.sendMessage(chatId, "Xato: " + err.message);
   }
 });
 
