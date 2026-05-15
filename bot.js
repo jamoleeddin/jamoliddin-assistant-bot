@@ -2,29 +2,29 @@ const TelegramBot = require("node-telegram-bot-api");
 const https = require("https");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const chatHistories = {};
 
 const SYSTEM_TEXT = "Siz Jamoliddin akaning shaxsiy yordamchisisiz. Ismingiz Yordamchi va siz sun'iy intellekt asosida ishlaysiz. Har doim o'zingizni Men Jamoliddin akaning yordamchisiman, sun'iy intellekt asosida ishlayman deb tanishtiring (faqat birinchi xabarda). Foydalanuvchilarga do'stona, professional va foydali tarzda javob bering. O'zbek tilida muloqot qiling, agar foydalanuvchi boshqa tilda yozsa, o'sha tilda javob bering. Jamoliddin aka haqida so'rashsa: u professional mutaxassis bo'lib, sizni o'z yordamchisi sifatida ishlatadi.";
 
-function geminiRequest(contents) {
+function groqRequest(messages) {
   return new Promise((resolve, reject) => {
     const payload = {
-      system_instruction: {
-        parts: [{ text: SYSTEM_TEXT }]
-      },
-      contents: contents
+      model: "llama3-8b-8192",
+      messages: [{ role: "system", content: SYSTEM_TEXT }].concat(messages),
+      max_tokens: 1024
     };
 
     const body = JSON.stringify(payload);
     const options = {
-      hostname: "generativelanguage.googleapis.com",
-      path: "/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY,
+      hostname: "api.groq.com",
+      path: "/openai/v1/chat/completions",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": "Bearer " + GROQ_API_KEY,
         "Content-Length": Buffer.byteLength(body)
       }
     };
@@ -35,13 +35,11 @@ function geminiRequest(contents) {
       res.on("end", function() {
         try {
           const parsed = JSON.parse(data);
-          const text = parsed.candidates &&
-            parsed.candidates[0] &&
-            parsed.candidates[0].content &&
-            parsed.candidates[0].content.parts &&
-            parsed.candidates[0].content.parts[0] &&
-            parsed.candidates[0].content.parts[0].text
-              ? parsed.candidates[0].content.parts[0].text
+          const text = parsed.choices &&
+            parsed.choices[0] &&
+            parsed.choices[0].message &&
+            parsed.choices[0].message.content
+              ? parsed.choices[0].message.content
               : "Javob olishda xato yuz berdi.";
           resolve(text);
         } catch(e) {
@@ -59,21 +57,15 @@ function geminiRequest(contents) {
 async function getAIResponse(userId, userMessage) {
   if (!chatHistories[userId]) chatHistories[userId] = [];
 
-  chatHistories[userId].push({
-    role: "user",
-    parts: [{ text: userMessage }]
-  });
+  chatHistories[userId].push({ role: "user", content: userMessage });
 
   if (chatHistories[userId].length > 20) {
     chatHistories[userId] = chatHistories[userId].slice(-20);
   }
 
-  const text = await geminiRequest(chatHistories[userId]);
+  const text = await groqRequest(chatHistories[userId]);
 
-  chatHistories[userId].push({
-    role: "model",
-    parts: [{ text: text }]
-  });
+  chatHistories[userId].push({ role: "assistant", content: text });
 
   return text;
 }
@@ -82,7 +74,7 @@ bot.onText(/\/start/, async function(msg) {
   const chatId = msg.chat.id;
   const firstName = msg.from && msg.from.first_name ? msg.from.first_name : "Foydalanuvchi";
   await bot.sendMessage(chatId,
-    "Salom, " + firstName + "! \n\nMen Jamoliddin akaning shaxsiy yordamchisiman. Sun'iy intellekt asosida ishlayman.\n\nSavolingizni yozing!"
+    "Salom, " + firstName + "!\n\nMen Jamoliddin akaning shaxsiy yordamchisiman. Sun'iy intellekt asosida ishlayman.\n\nSavolingizni yozing!"
   );
 });
 
