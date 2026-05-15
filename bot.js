@@ -7,8 +7,7 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const WEBHOOK_URL = "https://jamoliddin-assistant-bot-production.up.railway.app";
 const PORT = process.env.PORT || 3000;
 
-const bot = new TelegramBot(BOT_TOKEN, { webHook: { port: PORT } });
-bot.setWebHook(WEBHOOK_URL + "/bot" + BOT_TOKEN);
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 const chatHistories = {};
 
@@ -104,4 +103,34 @@ bot.on("business_message", async function(msg) {
   }
 });
 
-console.log("Bot webhook rejimida ishga tushdi, port: " + PORT);
+// HTTP server — webhook uchun
+const webhookPath = "/bot" + BOT_TOKEN;
+
+const server = http.createServer(function(req, res) {
+  if (req.method === "POST" && req.url === webhookPath) {
+    let body = "";
+    req.on("data", function(chunk) { body += chunk; });
+    req.on("end", function() {
+      try {
+        const update = JSON.parse(body);
+        bot.processUpdate(update);
+      } catch(e) {
+        console.error("Update parse xato:", e.message);
+      }
+      res.writeHead(200);
+      res.end("OK");
+    });
+  } else {
+    res.writeHead(200);
+    res.end("Bot ishlayapti!");
+  }
+});
+
+server.listen(PORT, function() {
+  console.log("Server port " + PORT + " da ishga tushdi");
+  bot.setWebHook(WEBHOOK_URL + webhookPath).then(function() {
+    console.log("Webhook o'rnatildi: " + WEBHOOK_URL + webhookPath);
+  }).catch(function(err) {
+    console.error("Webhook xato:", err.message);
+  });
+});
