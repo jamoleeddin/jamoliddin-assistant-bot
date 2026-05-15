@@ -1,10 +1,15 @@
 const TelegramBot = require("node-telegram-bot-api");
 const https = require("https");
+const http = require("http");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const WEBHOOK_URL = "https://jamoliddin-assistant-bot-production.up.railway.app";
+const PORT = process.env.PORT || 3000;
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(BOT_TOKEN, { webHook: { port: PORT } });
+bot.setWebHook(WEBHOOK_URL + "/bot" + BOT_TOKEN);
+
 const chatHistories = {};
 
 const SYSTEM_TEXT = "Siz Jamoliddin akaning shaxsiy yordamchisisiz. Ismingiz Yordamchi va siz sun'iy intellekt asosida ishlaysiz. Har doim o'zingizni Men Jamoliddin akaning yordamchisiman, sun'iy intellekt asosida ishlayman deb tanishtiring (faqat birinchi xabarda). Foydalanuvchilarga do'stona, professional va foydali tarzda javob bering. O'zbek tilida muloqot qiling, agar foydalanuvchi boshqa tilda yozsa, o'sha tilda javob bering. Jamoliddin aka haqida so'rashsa: u professional mutaxassis bo'lib, sizni o'z yordamchisi sifatida ishlatadi.";
@@ -16,7 +21,6 @@ function groqRequest(messages) {
       messages: [{ role: "system", content: SYSTEM_TEXT }].concat(messages),
       max_tokens: 1024
     };
-
     const body = JSON.stringify(payload);
     const options = {
       hostname: "api.groq.com",
@@ -28,7 +32,6 @@ function groqRequest(messages) {
         "Content-Length": Buffer.byteLength(body)
       }
     };
-
     const req = https.request(options, function(res) {
       let data = "";
       res.on("data", function(chunk) { data += chunk; });
@@ -42,12 +45,9 @@ function groqRequest(messages) {
               ? parsed.choices[0].message.content
               : "Javob olishda xato yuz berdi.";
           resolve(text);
-        } catch(e) {
-          reject(e);
-        }
+        } catch(e) { reject(e); }
       });
     });
-
     req.on("error", reject);
     req.write(body);
     req.end();
@@ -56,17 +56,12 @@ function groqRequest(messages) {
 
 async function getAIResponse(userId, userMessage) {
   if (!chatHistories[userId]) chatHistories[userId] = [];
-
   chatHistories[userId].push({ role: "user", content: userMessage });
-
   if (chatHistories[userId].length > 20) {
     chatHistories[userId] = chatHistories[userId].slice(-20);
   }
-
   const text = await groqRequest(chatHistories[userId]);
-
   chatHistories[userId].push({ role: "assistant", content: text });
-
   return text;
 }
 
@@ -109,5 +104,4 @@ bot.on("business_message", async function(msg) {
   }
 });
 
-console.log("Bot ishga tushdi...");
- 
+console.log("Bot webhook rejimida ishga tushdi, port: " + PORT);
