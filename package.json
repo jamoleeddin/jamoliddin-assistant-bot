@@ -1,0 +1,13 @@
+{
+  "name": "jamoliddin-assistant-bot",
+  "version": "1.0.0",
+  "description": "Jamoliddin aka AI yordamchisi",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "@google/generative-ai": "^0.21.0"
+  }
+}
