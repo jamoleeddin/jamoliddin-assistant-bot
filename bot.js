@@ -110,3 +110,4 @@ bot.on("business_message", async function(msg) {
 });
 
 console.log("Bot ishga tushdi...");
+ 
