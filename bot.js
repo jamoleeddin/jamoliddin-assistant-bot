@@ -7,6 +7,9 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const WEBHOOK_URL = "https://jamoliddin-assistant-bot-production.up.railway.app";
 const PORT = process.env.PORT || 3000;
 
+// Jamoliddin akaning Telegram ID si — bu ID dan kelgan xabarlarga javob berilmaydi
+const OWNER_ID = 1160509137;
+
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
@@ -47,288 +50,105 @@ Cheklovlar:
 - Aniq narx aytmang — "ish ko'lamiga qarab" deyin va uchrashuv taklif qiling
 - Bilmasangiz: "Jamoliddin aka o'zi tushuntiradi, bog'lanib qo'yaman" deying`;
 
-
-// ========================================
-// DELAY FUNCTION
-// ========================================
-
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-
-// ========================================
-// AI RESPONSE
-// ========================================
-
 async function getAIResponse(userId, userMessage) {
-
-  if (!chatHistories[userId]) {
-    chatHistories[userId] = [];
-  }
-
-  chatHistories[userId].push({
-    role: "user",
-    content: userMessage
-  });
-
-  // Faqat oxirgi 20ta message saqlanadi
+  if (!chatHistories[userId]) chatHistories[userId] = [];
+  chatHistories[userId].push({ role: "user", content: userMessage });
   if (chatHistories[userId].length > 20) {
-    chatHistories[userId] =
-      chatHistories[userId].slice(-20);
+    chatHistories[userId] = chatHistories[userId].slice(-20);
   }
-
-  const completion =
-    await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content: SYSTEM_TEXT
-        }
-      ].concat(chatHistories[userId]),
-      max_tokens: 1024
-    });
-
-  const text =
-    completion.choices[0].message.content;
-
-  chatHistories[userId].push({
-    role: "assistant",
-    content: text
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "system", content: SYSTEM_TEXT }].concat(chatHistories[userId]),
+    max_tokens: 1024
   });
-
+  const text = completion.choices[0].message.content;
+  chatHistories[userId].push({ role: "assistant", content: text });
   return text;
 }
 
-
-// ========================================
-// START COMMAND
-// ========================================
-
 bot.onText(/\/start/, async function(msg) {
-
+  if (msg.from && msg.from.id === OWNER_ID) return;
   const chatId = msg.chat.id;
-
-  const firstName =
-    msg.from && msg.from.first_name
-      ? msg.from.first_name
-      : "Foydalanuvchi";
-
-  await bot.sendMessage(
-    chatId,
-    "Salom, " + firstName + "!\n\n" +
-    "Men Jamoliddin akaning shaxsiy yordamchisiman. " +
-    "Sun'iy intellekt asosida ishlayman.\n\n" +
-    "Savolingizni yozing!"
+  const firstName = msg.from && msg.from.first_name ? msg.from.first_name : "Foydalanuvchi";
+  await bot.sendMessage(chatId,
+    "Salom, " + firstName + "!\n\nSavolingizni yozing, yordam berishga tayyorman!"
   );
 });
 
-
-// ========================================
-// NORMAL MESSAGES
-// ========================================
-
 bot.on("message", async function(msg) {
-
-  // Commandlarni skip qiladi
-  if (msg.text && msg.text.startsWith("/")) {
-    return;
-  }
+  // O'z xabarlarini skip qilish
+  if (msg.from && msg.from.id === OWNER_ID) return;
+  if (msg.text && msg.text.startsWith("/")) return;
 
   const chatId = msg.chat.id;
-
-  const userId =
-    String(
-      msg.from && msg.from.id
-        ? msg.from.id
-        : chatId
-    );
-
+  const userId = String(msg.from && msg.from.id ? msg.from.id : chatId);
   const text = msg.text;
-
   if (!text) return;
 
   try {
-
-    // typing status
     await bot.sendChatAction(chatId, "typing");
-
-    // AI response olish
-    const response =
-      await getAIResponse(userId, text);
-
-    // Insondek typing delay
-    const baseDelay = 1000;
-
-    const typingTime =
-      Math.min(
-        response.length * 35,
-        5000
-      );
-
-    const totalDelay =
-      baseDelay + typingTime;
-
+    const response = await getAIResponse(userId, text);
+    const totalDelay = 1000 + Math.min(response.length * 35, 5000);
     await sleep(totalDelay);
-
-    // Javob yuborish
     await bot.sendMessage(chatId, response);
-
   } catch(err) {
-
-    console.error(
-      "Xato tafsiloti:",
-      JSON.stringify(err)
-    );
-
-    await bot.sendMessage(
-      chatId,
-      "Xato: " + err.message
-    );
+    console.error("Xato:", JSON.stringify(err));
+    await bot.sendMessage(chatId, "Xato: " + err.message);
   }
 });
-
-
-// ========================================
-// BUSINESS MESSAGES
-// ========================================
 
 bot.on("business_message", async function(msg) {
+  // O'z xabarlarini skip qilish
+  if (msg.from && msg.from.id === OWNER_ID) return;
 
   const chatId = msg.chat.id;
-
   const bId = msg.business_connection_id;
-
-  const userId =
-    String(
-      msg.from && msg.from.id
-        ? msg.from.id
-        : chatId
-    );
-
+  const userId = String(msg.from && msg.from.id ? msg.from.id : chatId);
   const text = msg.text;
-
   if (!text) return;
 
   try {
-
-    await bot.sendChatAction(
-      chatId,
-      "typing",
-      {
-        business_connection_id: bId
-      }
-    );
-
-    const response =
-      await getAIResponse(userId, text);
-
-    const baseDelay = 1000;
-
-    const typingTime =
-      Math.min(
-        response.length * 35,
-        5000
-      );
-
-    const totalDelay =
-      baseDelay + typingTime;
-
+    await bot.sendChatAction(chatId, "typing", { business_connection_id: bId });
+    const response = await getAIResponse(userId, text);
+    const totalDelay = 1000 + Math.min(response.length * 35, 5000);
     await sleep(totalDelay);
-
-    await bot.sendMessage(
-      chatId,
-      response,
-      {
-        business_connection_id: bId
-      }
-    );
-
+    await bot.sendMessage(chatId, response, { business_connection_id: bId });
   } catch(err) {
-
-    console.error(
-      "Business xato:",
-      err.message
-    );
+    console.error("Business xato:", err.message);
   }
 });
-
-
-// ========================================
-// WEBHOOK SERVER
-// ========================================
 
 const webhookPath = "/bot" + BOT_TOKEN;
 
 const server = http.createServer(function(req, res) {
-
-  if (
-    req.method === "POST" &&
-    req.url === webhookPath
-  ) {
-
+  if (req.method === "POST" && req.url === webhookPath) {
     let body = "";
-
-    req.on("data", function(chunk) {
-      body += chunk;
-    });
-
+    req.on("data", function(chunk) { body += chunk; });
     req.on("end", function() {
-
       try {
-
         const update = JSON.parse(body);
-
         bot.processUpdate(update);
-
       } catch(e) {
-
-        console.error(
-          "Update parse xato:",
-          e.message
-        );
+        console.error("Update parse xato:", e.message);
       }
-
       res.writeHead(200);
       res.end("OK");
     });
-
   } else {
-
     res.writeHead(200);
     res.end("Bot ishlayapti!");
   }
 });
 
-
-// ========================================
-// START SERVER
-// ========================================
-
 server.listen(PORT, function() {
-
-  console.log(
-    "Server port " +
-    PORT +
-    " da ishga tushdi"
-  );
-
-  bot.setWebHook(
-    WEBHOOK_URL + webhookPath
-  )
-  .then(function() {
-
-    console.log(
-      "Webhook o'rnatildi!"
-    );
-
-  })
-  .catch(function(err) {
-
-    console.error(
-      "Webhook xato:",
-      err.message
-    );
+  console.log("Server port " + PORT + " da ishga tushdi");
+  bot.setWebHook(WEBHOOK_URL + webhookPath).then(function() {
+    console.log("Webhook o'rnatildi!");
+  }).catch(function(err) {
+    console.error("Webhook xato:", err.message);
   });
 });
